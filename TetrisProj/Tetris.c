@@ -1,10 +1,29 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
-#include <Windows.h>
+#include <time.h>
+#include <windows.h>
 
 #define CANVAS_WIDTH 10
 #define CANVAS_HEIGHT 20
 
+//掉落時間
+#define FALL_DELAY 500
+#define RENDER_DELAY 100
+
+//鍵盤對照表
+#define LEFT_KEY 0x25
+#define RIGHT_KEY 0x27 
+#define ROTATE_KEY 0x26 
+#define DOWN_KEY 0x28 
+#define FALL_KEY 0x20 
+
+// 判斷是否有按下按鈕的函式
+#define LEFT_FUNC() GetAsyncKeyState(LEFT_KEY) & 0x8000
+#define RIGHT_FUNC() GetAsyncKeyState(RIGHT_KEY) & 0x8000
+#define ROTATE_FUNC() GetAsyncKeyState(ROTATE_KEY) & 0x8000
+#define DOWN_FUNC() GetAsyncKeyState(DOWN_KEY) & 0x8000
+#define FALL_FUNC() GetAsyncKeyState(FALL_KEY) & 0x8000
 
 typedef enum { // colors of tetris pieces
     COLOR_RED = 41,
@@ -430,32 +449,105 @@ int clearLine(Block canvas[CANVAS_HEIGHT][CANVAS_WIDTH])
     }
 
     int linesCleared = 0;
-    /*....日後會再更新*/
+
+    for (int i = CANVAS_HEIGHT - 1; i >= 0; i--)
+    {
+        //原本的code
+        bool isFull = true;
+        for (int j = 0; j < CANVAS_WIDTH; j++)
+        {
+            if (canvas[i][j].shape == SHAPE_EMPTY)
+            {
+                isFull = false;
+                break;
+            }
+        }
+        //新增的
+        if (isFull) {
+            linesCleared += 1;
+
+            for (int j = i; j > 0; j--)
+            {
+                for (int k = 0; k < CANVAS_WIDTH; k++)
+                {
+                    setBlock(&canvas[j][k], canvas[j - 1][k].color, canvas[j - 1][k].shape, false);
+                    resetBlock(&canvas[j - 1][k]);
+                }
+            }
+            i++;
+        }
+    }
     return linesCleared;
 }
 
 void logic(Block canvas[CANVAS_HEIGHT][CANVAS_WIDTH], State* state)
 {
-    if (move(canvas, state->x, state->y, state->rotate, state->x, state->y + 1, state->rotate, state->queue[0]))
+    if (ROTATE_FUNC())
     {
-        state->y++;
+        int newRotate = (state->rotate + 1) % 4;
+        if (move(canvas, state->x, state->y, state->rotate, state->x, state->y, newRotate, state->queue[0]))
+        {
+            state->rotate = newRotate;
+        }
     }
-    else
+    else if (LEFT_FUNC())
     {
-        state->score += clearLine(canvas);
+        if (move(canvas, state->x, state->y, state->rotate, state->x - 1, state->y, state->rotate, state->queue[0]))
+        {
+            state->x -= 1;
+        }
+    }
+    else if (RIGHT_FUNC())
+    {
+        if (move(canvas, state->x, state->y, state->rotate, state->x + 1, state->y, state->rotate, state->queue[0]))
+        {
+            state->x += 1;
+        }
+    }
+    else if (DOWN_FUNC())
+    {
+        state->fallTime = FALL_DELAY;
+    }
+    else if (FALL_FUNC())
+    {
+        state->fallTime += FALL_DELAY * CANVAS_HEIGHT;
+    }
 
-        state->x = CANVAS_WIDTH / 2;
-        state->y = 0;
-        state->rotate = 0;
-        state->queue[0] = state->queue[1];
-        state->queue[1] = state->queue[2];
-        state->queue[2] = state->queue[3];
-        state->queue[3] = rand() % 7;
+    state->fallTime += RENDER_DELAY;
+    //100
+    //200
+    //300
+    //400
+    //500
+    while (state->fallTime >= FALL_DELAY)
+    {
+        state->fallTime -= FALL_DELAY;
+        if (move(canvas, state->x, state->y, state->rotate, state->x, state->y + 1, state->rotate, state->queue[0]))
+        {
+            state->y++;
+        }
+        else
+        {
+            state->score += clearLine(canvas);
 
+            state->x = CANVAS_WIDTH / 2;
+            state->y = 0;
+            state->rotate = 0;
+            state->queue[0] = state->queue[1];
+            state->queue[1] = state->queue[2];
+            state->queue[2] = state->queue[3];
+            state->queue[3] = rand() % 7;
+
+            //結束輸出
+            if (!move(canvas, state->x, state->y, state->rotate, state->x, state->y, state->rotate, state->queue[0]))
+            {
+                printf("\033[%d;%dH\x1b[41m GAME OVER \x1b[0m\033[%d;%dH", CANVAS_HEIGHT - 3, CANVAS_WIDTH * 2 + 5, CANVAS_HEIGHT + 5, 0);
+                exit(0);//結束遊戲
+            }
+        }
     }
     return;
 }
-
 
 
 
